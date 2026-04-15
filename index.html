@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Caça Palavras Eróticos</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Lato:wght@300;400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<style>
+:root{
+  --bg-start:#F3E8FF;--bg-end:#FFFFFF;--accent:#9B6DC6;--accent-light:#D4B5E8;
+  --accent-dark:#7B4FA0;--text:#4A2D6B;--text-light:#8B6BAE;--card:rgba(255,255,255,0.88);
+  --border:#E0D0F0;--found-glow:rgba(155,109,198,0.35);
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{
+  font-family:'Lato',sans-serif;color:var(--text);min-height:100vh;overflow-x:hidden;
+  background:linear-gradient(160deg,var(--bg-start) 0%,#EDE0F7 30%,var(--bg-end) 70%,#F8F0FF 100%);
+  background-attachment:fixed;
+}
+#bgCanvas{position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:0}
+#confettiCanvas{position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:1000;display:none}
+.app{position:relative;z-index:1;max-width:1200px;margin:0 auto;padding:20px 16px 40px}
+header{text-align:center;padding:30px 0 10px}
+header h1{
+  font-family:'Playfair Display',serif;font-weight:900;font-size:clamp(28px,5vw,52px);
+  background:linear-gradient(135deg,var(--accent-dark),var(--accent),#C084E0);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+  letter-spacing:-1px;line-height:1.1;animation:titleFloat 4s ease-in-out infinite;
+}
+@keyframes titleFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+header p{color:var(--text-light);font-size:clamp(13px,2vw,16px);margin-top:6px;font-weight:300}
+.level-selector{display:flex;justify-content:center;gap:8px;margin:16px 0 8px;flex-wrap:wrap}
+.level-btn{
+  font-family:'Lato',sans-serif;font-weight:700;font-size:13px;
+  padding:10px 20px;border:2px solid var(--border);border-radius:12px;
+  background:var(--card);color:var(--text-light);cursor:pointer;
+  transition:all .25s;backdrop-filter:blur(10px);
+}
+.level-btn:hover{border-color:var(--accent-light);background:rgba(155,109,198,0.05)}
+.level-btn.active{
+  background:linear-gradient(135deg,var(--accent),var(--accent-dark));
+  color:#fff;border-color:var(--accent);box-shadow:0 4px 16px rgba(155,109,198,0.25);
+}
+.level-count{display:inline-block;background:rgba(255,255,255,0.2);padding:2px 8px;border-radius:8px;font-size:11px;margin-left:6px}
+.level-btn:not(.active) .level-count{background:rgba(155,109,198,0.1)}
+.stats-bar{display:flex;justify-content:center;gap:24px;flex-wrap:wrap;margin:12px 0 18px}
+.stat{
+  background:var(--card);backdrop-filter:blur(10px);border:1px solid var(--border);
+  border-radius:14px;padding:10px 22px;display:flex;align-items:center;gap:10px;
+  box-shadow:0 2px 12px rgba(155,109,198,0.08);transition:transform .2s;
+}
+.stat:hover{transform:translateY(-2px)}
+.stat i{color:var(--accent);font-size:18px}
+.stat .val{font-weight:700;font-size:18px;color:var(--accent-dark)}
+.stat .lbl{font-size:12px;color:var(--text-light);text-transform:uppercase;letter-spacing:1px}
+.game-layout{display:flex;gap:24px;align-items:flex-start}
+.grid-wrapper{
+  flex:0 0 auto;background:var(--card);backdrop-filter:blur(12px);
+  border:1px solid var(--border);border-radius:18px;padding:14px;
+  box-shadow:0 8px 40px rgba(155,109,198,0.1);overflow:auto;max-width:100%;
+}
+.grid{display:grid;gap:2px;user-select:none;-webkit-user-select:none;touch-action:none}
+.cell{
+  display:flex;align-items:center;justify-content:center;
+  font-family:'Lato',sans-serif;font-weight:700;
+  color:var(--text);background:rgba(255,255,255,0.7);
+  border-radius:4px;cursor:pointer;transition:background .15s,transform .15s,color .15s,box-shadow .15s;
+  opacity:0;animation:cellIn .35s ease forwards;
+}
+@keyframes cellIn{from{opacity:0;transform:scale(.4)}to{opacity:1;transform:scale(1)}}
+.cell:hover{background:var(--accent-light);transform:scale(1.12);box-shadow:0 0 8px var(--found-glow)}
+.cell.selecting{background:var(--accent);color:#fff;transform:scale(1.08);box-shadow:0 0 12px var(--found-glow)}
+.cell.found{color:#fff;font-weight:900;transform:scale(1.02);box-shadow:0 2px 8px rgba(0,0,0,0.1)}
+.cell.hint-flash{animation:hintPulse .6s ease 3}
+@keyframes hintPulse{0%,100%{box-shadow:0 0 0 rgba(155,109,198,0)}50%{box-shadow:0 0 16px 4px rgba(155,109,198,0.6)}}
+.hints-panel{
+  flex:1;min-width:260px;max-width:340px;
+  background:var(--card);backdrop-filter:blur(12px);border:1px solid var(--border);
+  border-radius:18px;padding:20px;box-shadow:0 8px 40px rgba(155,109,198,0.1);
+  max-height:70vh;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--accent-light) transparent;
+}
+.hints-panel::-webkit-scrollbar{width:6px}
+.hints-panel::-webkit-scrollbar-thumb{background:var(--accent-light);border-radius:3px}
+.hints-panel h2{
+  font-family:'Playfair Display',serif;font-size:22px;font-weight:700;
+  color:var(--accent-dark);margin-bottom:14px;display:flex;align-items:center;gap:8px;
+}
+.hint-item{border:1px solid var(--border);border-radius:12px;margin-bottom:8px;overflow:hidden;transition:all .3s;background:rgba(255,255,255,0.5)}
+.hint-item.found-item{background:rgba(200,230,200,0.3);border-color:#A5D6A7}
+.hint-header{display:flex;align-items:center;gap:8px;padding:10px 12px;cursor:pointer;transition:background .2s}
+.hint-header:hover{background:rgba(155,109,198,0.06)}
+.hint-check{
+  width:22px;height:22px;border-radius:50%;border:2px solid var(--border);
+  display:flex;align-items:center;justify-content:center;font-size:11px;
+  transition:all .3s;flex-shrink:0;
+}
+.hint-item.found-item .hint-check{background:#66BB6A;border-color:#66BB6A;color:#fff}
+.hint-word{font-weight:700;font-size:13px;letter-spacing:1px;color:var(--text);flex:1}
+.hint-item.found-item .hint-word{text-decoration:line-through;opacity:.6}
+.hint-toggle{color:var(--accent);font-size:14px;transition:transform .3s}
+.hint-toggle.open{transform:rotate(180deg)}
+.hint-body{max-height:0;overflow:hidden;transition:max-height .35s ease,padding .35s;padding:0 12px;font-size:13px;color:var(--text-light);line-height:1.5}
+.hint-body.open{max-height:120px;padding:0 12px 12px}
+.controls{display:flex;justify-content:center;gap:12px;margin-top:22px;flex-wrap:wrap}
+.btn{
+  font-family:'Lato',sans-serif;font-weight:700;font-size:14px;
+  padding:12px 28px;border:none;border-radius:12px;cursor:pointer;
+  transition:all .25s;display:flex;align-items:center;gap:8px;
+  box-shadow:0 4px 16px rgba(155,109,198,0.15);
+}
+.btn-primary{background:linear-gradient(135deg,var(--accent),var(--accent-dark));color:#fff}
+.btn-primary:hover{transform:translateY(-2px);box-shadow:0 6px 24px rgba(155,109,198,0.3)}
+.btn-secondary{background:#fff;color:var(--accent-dark);border:1px solid var(--border)}
+.btn-secondary:hover{transform:translateY(-2px);background:var(--accent-light);color:#fff;border-color:var(--accent-light)}
+.toast{
+  position:fixed;bottom:30px;left:50%;transform:translateX(-50%) translateY(100px);
+  background:var(--accent-dark);color:#fff;padding:14px 28px;border-radius:14px;
+  font-weight:700;font-size:15px;z-index:500;opacity:0;
+  transition:all .4s cubic-bezier(.175,.885,.32,1.275);
+  box-shadow:0 8px 30px rgba(123,79,160,0.4);pointer-events:none;
+  white-space:nowrap;max-width:90vw;overflow:hidden;text-overflow:ellipsis;
+}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.modal-overlay{
+  position:fixed;inset:0;background:rgba(74,45,107,0.5);backdrop-filter:blur(6px);
+  z-index:900;display:none;align-items:center;justify-content:center;padding:20px;
+}
+.modal-overlay.show{display:flex}
+.modal{
+  background:#fff;border-radius:24px;padding:40px;text-align:center;max-width:420px;
+  width:100%;box-shadow:0 20px 60px rgba(74,45,107,0.3);
+  animation:modalIn .5s cubic-bezier(.175,.885,.32,1.275);
+}
+@keyframes modalIn{from{opacity:0;transform:scale(.7) translateY(30px)}to{opacity:1;transform:scale(1) translateY(0)}}
+.modal h2{font-family:'Playfair Display',serif;font-size:28px;color:var(--accent-dark);margin-bottom:8px}
+.modal p{color:var(--text-light);margin-bottom:20px;font-size:15px}
+.modal .final-stats{display:flex;justify-content:center;gap:20px;margin-bottom:24px}
+.modal .fs-item{text-align:center}
+.modal .fs-item .fs-val{font-size:28px;font-weight:900;color:var(--accent)}
+.modal .fs-item .fs-lbl{font-size:11px;color:var(--text-light);text-transform:uppercase;letter-spacing:1px}
+@media(max-width:800px){
+  .game-layout{flex-direction:column;align-items:center}
+  .hints-panel{max-width:100%;max-height:40vh;min-width:unset}
+  .grid-wrapper{max-width:100%}
+}
+@media(max-width:420px){
+  .app{padding:10px 8px 30px}
+  .stats-bar{gap:10px}
+  .stat{padding:8px 14px}
+  .hints-panel{padding:14px}
+  .level-selector{gap:6px}
+  .level-btn{padding:8px 14px;font-size:12px}
+}
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}
+}
+</style>
+</head>
+<body>
+
+<canvas id="bgCanvas"></canvas>
+<canvas id="confettiCanvas"></canvas>
+
+<div class="app">
+  <header>
+    <h1>Caça Palavras Eróticos</h1>
+    <p>Deslize para selecionar e encontre todas as palavras escondidas</p>
+  </header>
+
+  <div class="level-selector" id="levelSelector">
+    <button class="level-btn active" data-level="0">Nível 1<span class="level-count">35</span></button>
+    <button class="level-btn" data-level="1">Nível 2<span class="level-count">44</span></button>
+    <button class="level-btn" data-level="2">Nível 3<span class="level-count">54</span></button>
+    <button class="level-btn" data-level="3">Nível 4<span class="level-count">64</span></button>
+  </div>
+
+  <div class="stats-bar">
+    <div class="stat"><i class="fas fa-check-circle"></i><div><div class="val" id="foundCount">0</div><div class="lbl">Encontradas</div></div></div>
+    <div class="stat"><i class="fas fa-list"></i><div><div class="val" id="totalCount">0</div><div class="lbl">Total</div></div></div>
+    <div class="stat"><i class="fas fa-clock"></i><div><div class="val" id="timer">00:00</div><div class="lbl">Tempo</div></div></div>
+  </div>
+
+  <div class="game-layout">
+    <div class="grid-wrapper"><div class="grid" id="grid"></div></div>
+    <div class="hints-panel" id="hintsPanel">
+      <h2><i class="fas fa-lightbulb"></i> Dicas</h2>
+      <div id="hintsList"></div>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button class="btn btn-primary" id="btnNew"><i class="fas fa-redo"></i> Novo Jogo</button>
+    <button class="btn btn-secondary" id="btnHint"><i class="fas fa-eye"></i> Revelar Dica</button>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal">
+    <h2>Parabéns!</h2>
+    <p>Você encontrou todas as palavras</p>
+    <div class="final-stats">
+      <div class="fs-item"><div class="fs-val" id="finalTime">--:--</div><div class="fs-lbl">Tempo</div></div>
+      <div class="fs-item"><div class="fs-val" id="finalWords">0</div><div class="fs-lbl">Palavras</div></div>
+    </div>
+    <button class="btn btn-primary" id="btnPlayAgain" style="margin:0 auto"><i class="fas fa-play"></i> Jogar Novamente</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ===== UTILITÁRIOS ===== */
+function norm(s){return s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase()}
+function cellSize(gs){
+  var mw=Math.min(window.innerWidth-64,820);
+  var gap=(gs-1)*2;
+  var s=Math.floor((mw-gap)/gs);
+  return Math.max(10,Math.min(30,s));
+}
+function fColor(i){var h=(i*137.5)%360;return 'hsl('+h+',60%,74%)'}
+
+/* ===== DADOS DOS 4 NÍVEIS ===== */
+var LEVELS=[
+/* --- NÍVEL 1: 20x20, 35 palavras --- */
+{gridSize:20,words:[
+  {word:"BDSM",hint:"Prática que envolve Bondage, Disciplina, Dominância e Submissão"},
+  {word:"Dedilhando",hint:"Técnica de estimulação com os dedos em movimentos delicados"},
+  {word:"Orgasmo",hint:"Clímax do prazer sexual, momento de intensa satisfação"},
+  {word:"Anal",hint:"Relativo à região do ânus, prática de penetração traseira"},
+  {word:"Seios",hint:"Partes do corpo feminino, também chamados de mamas"},
+  {word:"Cervical",hint:"Relativo ao colo do útero, zona erógena interna profunda"},
+  {word:"Cerebral",hint:"Relativo ao cérebro, prazer mental e estimulação imaginativa"},
+  {word:"Palmada",hint:"Estímulo com a mão nas nádegas, prática de spanking"},
+  {word:"Kivin",hint:"Técnica oral focada no clitóris com estímulo lateral"},
+  {word:"Perineo",hint:"Região entre o ânus e os genitais, área muito sensível"},
+  {word:"Massagem",hint:"Manipulação de tecidos para prazer e relaxamento profundo"},
+  {word:"Lingua",hint:"Órgão muscular essencial em práticas orais e beijos"},
+  {word:"Yoni",hint:"Termo sânscrito sagrado para os genitais femininos"},
+  {word:"Nuru",hint:"Massagem japonesa com gel escorregadio, corpo a corpo"},
+  {word:"Shiatsu",hint:"Massagem japonesa terapêutica com pressão dos dedos"},
+  {word:"Aquatica",hint:"Prática sensual e erótica realizada na água"},
+  {word:"Karazza",hint:"Técnica de estímulo com movimentos circulares suaves"},
+  {word:"Eletromagnetica",hint:"Terapia que utiliza campos magnéticos para estimulação"},
+  {word:"Tantrica",hint:"Prática oriental milenar que une sexualidade e espiritualidade"},
+  {word:"Bodywork",hint:"Trabalho corporal integrativo, terapêutico e sensual"},
+  {word:"Mindfulness",hint:"Atenção plena ao momento presente aplicada ao prazer"},
+  {word:"Kunyaza",hint:"Técnica africana de estímulo feminino para orgasmos múltiplos"},
+  {word:"Gouinage",hint:"Técnica de movimentos rápidos e rítmicos com a língua"},
+  {word:"Bondage",hint:"Prática de restrição com cordas, amarras ou acessórios"},
+  {word:"Roleplay",hint:"Encenação de fantasias e papéis eróticos"},
+  {word:"Waxplay",hint:"Prática sensorial com gotas de vela quente no corpo"},
+  {word:"Disciplina",hint:"Conjunto de regras e punições consensuais no contexto BDSM"},
+  {word:"Aftercare",hint:"Cuidado, carinho e atenção pós-prática BDSM"},
+  {word:"Flogging",hint:"Uso de chicote ou flagelo para estímulo consensual"},
+  {word:"Asmr",hint:"Resposta Sensorial Autônoma, prazer por sons suaves"},
+  {word:"Sensorial",hint:"Relativo à estimulação intensa dos cinco sentidos"},
+  {word:"Erogena",hint:"Zona do corpo que responde fortemente ao estímulo sexual"},
+  {word:"Posicao",hint:"Maneira de posicionar o corpo durante a relação"},
+  {word:"Lotus",hint:"Posição sentada de origem tântrica, como a flor de lótus"}
+]},
+/* --- NÍVEL 2: 24x24, 44 palavras --- */
+{gridSize:24,words:[
+  {word:"Ejaculação",hint:"Expulsão de sêmen durante o clímax sexual masculino"},
+  {word:"Mulheres",hint:"Pessoas do sexo feminino, fonte de desejo e admiração"},
+  {word:"Homem",hint:"Pessoa do sexo masculino"},
+  {word:"Prazerosa",hint:"Que causa sensação de deleite e satisfação intensa"},
+  {word:"Desapego",hint:"Libertação emocional, soltar o controle durante o ato"},
+  {word:"Psicológico",hint:"Relativo à mente e processos mentais no prazer"},
+  {word:"Estimulação",hint:"Ação de provocar excitação ou resposta sensual"},
+  {word:"Intensa",hint:"De grande força, vigor ou profundidade no prazer"},
+  {word:"Libertação",hint:"Ato de se libertar, desprendimento total de tensões"},
+  {word:"Mental",hint:"Relativo à mente e ao pensamento erótico"},
+  {word:"Eufórica",hint:"Estado de intensa alegria e excitação durante o clímax"},
+  {word:"Onda",hint:"Ondulação de prazer que percorre todo o corpo"},
+  {word:"Alívio",hint:"Sensação de descanso e satisfação após tensão sexual"},
+  {word:"Conexão",hint:"Vínculo emocional e energético profundo entre parceiros"},
+  {word:"Vulnerável",hint:"Estado de exposição e fragilidade emocional íntima"},
+  {word:"Intimidade",hint:"Proximidade afetiva e física profunda entre pessoas"},
+  {word:"Confiança",hint:"Crença e segurança no outro durante práticas íntimas"},
+  {word:"Empoderada",hint:"Que se sente forte, dona de si e no controle"},
+  {word:"Pressão",hint:"Força aplicada sobre uma superfície do corpo"},
+  {word:"Sensação",hint:"Percepção física ou emocional intensa e prazerosa"},
+  {word:"Profunda",hint:"Que tem grande profundidade ou intensidade no ato"},
+  {word:"Ritmo",hint:"Cadência regular de movimentos durante a relação"},
+  {word:"Repetitivo",hint:"Que se repete continuamente de forma prazerosa"},
+  {word:"Ignorar",hint:"Não dar atenção aos pensamentos intrusivos durante o sexo"},
+  {word:"Sinais",hint:"Indicações do corpo sobre excitação e desejo crescente"},
+  {word:"Clitóris",hint:"Órgão erógeno principal feminino, rico em terminações nervosas"},
+  {word:"Físicos",hint:"Relativos ao corpo e à matéria tangível e sensível"},
+  {word:"Válvula",hint:"Estrutura que controla a passagem de fluidos no corpo"},
+  {word:"Autoescravização",hint:"Submissão voluntária e consciente a si mesmo"},
+  {word:"Emoção",hint:"Estado afetivo intenso e arrebatador durante o prazer"},
+  {word:"Meditação",hint:"Prática de foco e atenção plena aplicada ao sexo"},
+  {word:"Estresse",hint:"Tensão física ou mental excessiva a ser aliviada"},
+  {word:"Clímax",hint:"Ponto máximo de excitação e prazer sexual atingido"},
+  {word:"Intensificar",hint:"Tornar mais intenso ou forte o estímulo aplicado"},
+  {word:"Gelo",hint:"Gelo usado em práticas sensoriais de contraste de temperatura"},
+  {word:"Fechaduras",hint:"Dispositivos de travamento usados em bondage"},
+  {word:"Amarrar",hint:"Prender com cordas ou amarras de forma consensual"},
+  {word:"Pulso",hint:"Articulação do punho, ponto comum de amarração"},
+  {word:"Tornozelos",hint:"Articulações dos pés, pontos de restrição e imobilização"},
+  {word:"Laço",hint:"Laço para prender ou amarrar o parceiro consensualmente"},
+  {word:"Cadeira",hint:"Móvel usado como suporte em práticas de restrição"},
+  {word:"Adestramento",hint:"Treinamento no contexto de dominação consensual"},
+  {word:"After",hint:"Cuidado pós-sessão, abreviação de aftercare"},
+  {word:"Spanking",hint:"Espancamento erótico consensual aplicado nas nádegas"}
+]},
+/* --- NÍVEL 3: 28x28, 54 palavras --- */
+{gridSize:28,words:[
+  {word:"Humilhação",hint:"Prática de humilhação verbal consensual em cena BDSM"},
+  {word:"Agulhas",hint:"Uso de agulhas finas em práticas de modificações temporárias"},
+  {word:"Asfixia",hint:"Restrição controlada da respiração para intensificar excitação"},
+  {word:"Sufocamento",hint:"Obstrução parcial das vias aéreas como prática erótica"},
+  {word:"Bastinado",hint:"Palmadas nas solas dos pés como forma de punição erótica"},
+  {word:"Blindfold",hint:"Venda nos olhos para privação visual e aumento da sensibilidade"},
+  {word:"Privação",hint:"Restrição de um dos sentidos para intensificar os demais"},
+  {word:"CBT",hint:"Tortura erótica genital masculina consensual"},
+  {word:"Crush",hint:"Prática de esmagar objetos ou alimentos com o corpo"},
+  {word:"Dogplay",hint:"Roleplay onde um parceiro se comporta como cachorro"},
+  {word:"Eletroestimulação",hint:"Uso de corrente elétrica controlada para excitação erótica"},
+  {word:"Exibicionismo",hint:"Prazer em se exibir ou ser observado sexualmente"},
+  {word:"Sitting",hint:"Prática de sentar sobre o parceiro como dominação"},
+  {word:"Slap",hint:"Tapa leve e preciso aplicado como estímulo erótico"},
+  {word:"Fingering",hint:"Estimulação manual dos genitais com os dedos"},
+  {word:"Fisting",hint:"Penetração vaginal ou anal com a mão inteira"},
+  {word:"Infantilismo",hint:"Roleplay de ageplay com comportamento infantil consensual"},
+  {word:"Mumificação",hint:"Envolver o corpo inteiro em filme plástico ou tecido"},
+  {word:"Podolatria",hint:"Fetiche por pés, adoração e veneração dos pés"},
+  {word:"Shibari",hint:"Arte japonesa refinada de amarração erótica com cordas"},
+  {word:"Voyeurismo",hint:"Prazer em observar atos sexuais sem participar diretamente"},
+  {word:"Interrogatório",hint:"Cena de interrogatório simulado como forma de roleplay"},
+  {word:"Inversão",hint:"Troca de papéis entre dominante e submisso"},
+  {word:"Oral",hint:"Estimulação dos genitais com a boca e a língua"},
+  {word:"Culingua",hint:"Prática oral de lamber os genitais do parceiro com dedicação"},
+  {word:"Próstata",hint:"Glândula masculina interna que produz parte do sêmen"},
+  {word:"Pornográficos",hint:"Relativos a materiais de conteúdo sexual explícito"},
+  {word:"Squirting",hint:"Ejaculação feminina visível durante o orgasmo intenso"},
+  {word:"Capuz",hint:"Cobertura da cabeça usada em práticas de privação sensorial"},
+  {word:"Lábios",hint:"Partes carnudas da boca, zona erógena extremamente sensível"},
+  {word:"Glândula",hint:"Órgão que secreta substâncias no corpo humano"},
+  {word:"Skene",hint:"Glândula parauretral feminina relacionada ao squirting"},
+  {word:"Beijo",hint:"Toque de lábios, expressão fundamental de afeto e desejo"},
+  {word:"Cunnilingus",hint:"Estimulação oral do clitóris e genitais femininos"},
+  {word:"Ninho",hint:"Termo poético para a cavidade vaginal interna"},
+  {word:"Pênis",hint:"Órgão sexual masculino, também chamado de falo"},
+  {word:"Mergulhador",hint:"Posição oral onde quem recebe está deitado de costas"},
+  {word:"Transar",hint:"Termo coloquial para a prática da relação sexual"},
+  {word:"Uretra",hint:"Canal por onde passa a urina e o sêmen nos homens"}
+]},
+/* --- NÍVEL 4: 30x30, 64 palavras --- */
+{gridSize:30,words:[
+  {word:"Lingam",hint:"Termo sânscrito sagrado para o pênis na tradição tântrica"},
+  {word:"MamiLo",hint:"Mama feminina, zona erógena rica em terminações nervosas"},
+  {word:"Nuca",hint:"Região sensível na parte posterior do pescoço"},
+  {word:"Orelha",hint:"Zona erógena com muitas terminações nervosas, sensível a sussurros"},
+  {word:"Pescoço",hint:"Área sensível a beijos, mordidas e respiração"},
+  {word:"Axila",hint:"Zona erógena pouco explorada, sensível ao toque"},
+  {word:"Virilha",hint:"Região próxima aos genitais, extremamente sensível"},
+  {word:"Colo",hint:"Parte do corpo entre ombro e peito, área de aconchego"},
+  {word:"Escapulas",hint:"Omoplatas, zona sensível nas costas à massagem"},
+  {word:"Costas",hint:"Ampla área de exploração tátil e carícias"},
+  {word:"Lombar",hint:"Região baixa das costas, ponto de tensão e prazer"},
+  {word:"Glúteos",hint:"Nádegas, zona erógena clássica e sensual"},
+  {word:"Panturrilha",hint:"Parte da perna sensível à massagem e estímulo"},
+  {word:"Calcanhar",hint:"Parte inferior do pé em práticas de podolatria"},
+  {word:"Tórax",hint:"Parte superior do tronco, área sensível ao toque"},
+  {word:"Abdômen",hint:"Barriga, zona de grande sensibilidade à carícia"},
+  {word:"Umbigo",hint:"Ponto sensível no centro da barriga, zona erógena"},
+  {word:"Coxa",hint:"Parte superior da perna, zona erógena muito sensível"},
+  {word:"Joelho",hint:"Articulação sensível em práticas específicas de estímulo"},
+  {word:"Ponte",hint:"Posição onde um parceiro faz ponte com o corpo"},
+  {word:"Missionário",hint:"Posição clássica com penetração frontal de frente"},
+  {word:"Amazona",hint:"Posição com o parceiro receptivo em cima cavalgando"},
+  {word:"Colher",hint:"Posição lateral com corpos encaixados como colheres"},
+  {word:"Tesoura",hint:"Posição com pernas entrelaçadas em forma de tesoura"},
+  {word:"Cachorrinho",hint:"Posição clássica de penetração por trás, a quatro"},
+  {word:"Cavalgada",hint:"Variação da amazona com movimentos de montaria"},
+  {word:"Suspensa",hint:"Posição com um dos parceiros suspenso no ar"},
+  {word:"Triangular",hint:"Posição que forma um triângulo entre os corpos"},
+  {word:"Borracha",hint:"Preservativo, método contraceptivo de barreira"},
+  {word:"Riso",hint:"Expressão de prazer e descontração durante a intimidade"},
+  {word:"Esternão",hint:"Osso central do peito, zona sensível ao toque suave"},
+  {word:"Diafragma",hint:"Músculo que controla a respiração profunda no sexo"},
+  {word:"Barriga",hint:"Região abdominal, foco de carícias e beijos sensuais"},
+  {word:"Sacro",hint:"Osso triangular na base da coluna, área sensível"},
+  {word:"Cóccix",hint:"Osso final da coluna vertebral, próxima ao períneo"},
+  {word:"Escroto",hint:"Bolsa que contém os testículos, zona erógena masculina"},
+  {word:"PontoG",hint:"Zona erógena interna feminina na parede vaginal anterior"},
+  {word:"Vulva",hint:"Conjunto dos órgãos genitais externos femininos"},
+  {word:"Reto",hint:"Porção final do intestino, área de penetração anal"},
+  {word:"Erotica",hint:"Relativo ao erotismo e à sensualidade intensa"},
+  {word:"Kamasutra",hint:"Texto antigo indiano sobre sexualidade e posições"},
+  {word:"Pompoarismo",hint:"Técnica de contração voluntária da musculatura pélvica"},
+  {word:"Gozada",hint:"Termo coloquial para o momento intenso da ejaculação"},
+  {word:"Penetração",hint:"Ato de introduzir o pênis ou objeto nos genitais"},
+  {word:"Masturbação",hint:"Autoestimulação dos genitais para obtenção de prazer"},
+  {word:"Sedução",hint:"Arte de atrair e despertar desejo sexual no outro"},
+  {word:"Fetichismo",hint:"Atração sexual por objetos ou partes específicas do corpo"},
+  {word:"Dominância",hint:"Exercício de poder e controle na relação consensual"},
+  {word:"Submissão",hint:"Entrega voluntária ao controle do dominante na cena"},
+  {word:"Consentimento",hint:"Acordo livre e informado para práticas sexuais"},
+  {word:"Excitante",hint:"Que provoca excitação e desejo sexual intenso"},
+  {word:"Copulatório",hint:"Relativo ao ato sexual de cópula entre parceiros"},
+  {word:"Libidinoso",hint:"Cheio de libido, desejo sexual intenso e constante"},
+  {word:"Tátil",hint:"Relativo ao sentido do tato, essencial no prazer"},
+  {word:"Olfativo",hint:"Relativo ao olfato, feromônios e atração sexual"},
+  {word:"Auditivo",hint:"Relativo aos sons e gemidos que excitam durante o sexo"},
+  {word:"Palpitação",hint:"Aceleração dos batimentos cardíacos por excitação"},
+  {word:"Respiração",hint:"Controle da respiração para intensificar o prazer"},
+  {word:"Lubrificante",hint:"Produto que reduz atrito durante a penetração"},
+  {word:"Vibrador",hint:"Acessório mecânico que produz vibração para estimulação"},
+  {word:"Consolador",hint:"Acessório em formato fálico usado para penetração"}
+]}
+];
+
+/* ===== DIREÇÕES ===== */
+var DIRS=[[0,1],[1,0],[1,1],[1,-1],[0,-1],[-1,0],[-1,-1],[-1,1]];
+
+/* ===== ESTADO DO JOGO ===== */
+var GRID_SIZE=20, grid=[], placedWords=[], foundCount=0, totalPlaced=0;
+var timerInterval=null, seconds=0, isSelecting=false, startCell=null, currentCells=[], colorIndex=0;
+var currentLevel=0;
+
+/* ===== GERAÇÃO DO GRID ===== */
+function initGrid(){grid=[];for(var i=0;i<GRID_SIZE;i++){grid.push([]);for(var j=0;j<GRID_SIZE;j++)grid[i].push('');}}
+
+function canPlace(w,r,c,dr,dc){
+  for(var i=0;i<w.length;i++){var nr=r+i*dr,nc=c+i*dc;
+    if(nr<0||nr>=GRID_SIZE||nc<0||nc>=GRID_SIZE)return false;
+    if(grid[nr][nc]!==''&&grid[nr][nc]!==w[i])return false;}return true;
+}
+
+function placeWord(w,r,c,dr,dc){
+  var p=[];for(var i=0;i<w.length;i++){var nr=r+i*dr,nc=c+i*dc;grid[nr][nc]=w[i];p.push({r:nr,c:nc});}return p;
+}
+
+function generatePuzzle(){
+  var bestP=[],bestG=null;
+  for(var att=0;att<15;att++){
+    initGrid();
+    var sorted=LEVELS[currentLevel].words.slice().sort(function(a,b){return b.word.length-a.word.length});
+    var placed=[];
+    for(var k=0;k<sorted.length;k++){
+      var nw=norm(sorted[k].word), ok=false;
+      for(var t=0;t<5000;t++){
+        var d=DIRS[Math.floor(Math.random()*8)];
+        var rr=Math.floor(Math.random()*GRID_SIZE), cc=Math.floor(Math.random()*GRID_SIZE);
+        if(canPlace(nw,rr,cc,d[0],d[1])){
+          placed.push({word:sorted[k].word,norm:nw,hint:sorted[k].hint,positions:placeWord(nw,rr,cc,d[0],d[1]),found:false});
+          ok=true;break;
+        }
+      }
+    }
+    if(placed.length>bestP.length){bestP=placed;bestG=grid.map(function(row){return row.slice()});}
+    if(placed.length===sorted.length)break;
+  }
+  grid=bestG;placedWords=bestP;
+  var letters='ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  for(var r=0;r<GRID_SIZE;r++)for(var c=0;c<GRID_SIZE;c++)
+    if(grid[r][c]==='')grid[r][c]=letters[Math.floor(Math.random()*26)];
+}
+
+/* ===== RENDERIZAÇÃO ===== */
+function renderGrid(){
+  var ct=document.getElementById('grid');ct.innerHTML='';
+  var sz=cellSize(GRID_SIZE);
+  ct.style.gridTemplateColumns='repeat('+GRID_SIZE+','+sz+'px)';
+  for(var r=0;r<GRID_SIZE;r++)for(var c=0;c<GRID_SIZE;c++){
+    var el=document.createElement('div');el.className='cell';
+    el.textContent=grid[r][c];el.dataset.row=r;el.dataset.col=c;
+    el.style.width=sz+'px';el.style.height=sz+'px';
+    el.style.fontSize=Math.max(8,sz*0.48)+'px';
+    el.setAttribute('role','gridcell');
+    el.style.animationDelay=(r*GRID_SIZE+c)*2+'ms';
+    ct.appendChild(el);
+  }
+}
+
+function renderHints(){
+  var list=document.getElementById('hintsList');list.innerHTML='';
+  for(var i=0;i<placedWords.length;i++){
+    var pw=placedWords[i], item=document.createElement('div');
+    item.className='hint-item'+(pw.found?' found-item':'');
+    item.id='hint-'+i;
+    item.innerHTML='<div class="hint-header" data-idx="'+i+'"><div class="hint-check">'+(pw.found?'<i class="fas fa-check"></i>':'')+'</div><span class="hint-word">'+pw.word+'</span><i class="fas fa-chevron-down hint-toggle"></i></div><div class="hint-body">'+pw.hint+'</div>';
+    list.appendChild(item);
+  }
+  list.querySelectorAll('.hint-header').forEach(function(hdr){
+    hdr.addEventListener('click',function(){
+      var b=hdr.nextElementSibling,t=hdr.querySelector('.hint-toggle');
+      b.classList.toggle('open');t.classList.toggle('open');
+    });
+  });
+}
+
+/* ===== INTERAÇÃO: SELEÇÃO ===== */
+function getCellFromPt(x,y){
+  var el=document.elementFromPoint(x,y);
+  if(!el||!el.classList.contains('cell'))return null;
+  return{r:parseInt(el.dataset.row),c:parseInt(el.dataset.col)};
+}
+function getLineCells(r1,c1,r2,c2){
+  var dr=r2-r1,dc=c2-c1,ar=Math.abs(dr),ac=Math.abs(dc);
+  if(ar!==0&&ac!==0&&ar!==ac)return[];
+  var st=Math.max(ar,ac);if(st===0)return[{r:r1,c:c1}];
+  var sr=dr===0?0:(dr>0?1:-1),sc=dc===0?0:(dc>0?1:-1),cells=[];
+  for(var i=0;i<=st;i++)cells.push({r:r1+i*sr,c:c1+i*sc});return cells;
+}
+function clearSel(){document.querySelectorAll('.cell.selecting').forEach(function(c){c.classList.remove('selecting')});currentCells=[];}
+function hlCells(cells){clearSel();currentCells=cells;cells.forEach(function(o){var el=document.querySelector('.cell[data-row="'+o.r+'"][data-col="'+o.c+'"]');if(el)el.classList.add('selecting');});}
+function getEl(r,c){return document.querySelector('.cell[data-row="'+r+'"][data-col="'+c+'"]');}
+
+function checkSel(cells){
+  if(cells.length<2)return null;
+  for(var i=0;i<placedWords.length;i++){
+    var pw=placedWords[i];if(pw.found)continue;
+    if(cells.length!==pw.positions.length)continue;
+    var fwd=true,bwd=true;
+    for(var j=0;j<cells.length;j++){
+      if(cells[j].r!==pw.positions[j].r||cells[j].c!==pw.positions[j].c)fwd=false;
+      var k=cells.length-1-j;
+      if(cells[j].r!==pw.positions[k].r||cells[j].c!==pw.positions[k].c)bwd=false;
+    }
+    if(fwd||bwd)return pw;
+  }
+  return null;
+}
+
+function markFound(pw){
+  pw.found=true;var color=fColor(colorIndex);colorIndex++;foundCount++;
+  pw.positions.forEach(function(o,i){
+    var el=getEl(o.r,o.c);
+    if(el)setTimeout(function(){el.classList.remove('selecting');el.classList.add('found');el.style.background=color;el.style.transition='background .3s,transform .3s';},i*30);
+  });
+  var idx=placedWords.indexOf(pw);
+  var hi=document.getElementById('hint-'+idx);
+  if(hi){hi.classList.add('found-item');hi.querySelector('.hint-check').innerHTML='<i class="fas fa-check"></i>';}
+  updateStats();playDing();showToast('"'+pw.word+'" encontrada!');
+  if(foundCount===totalPlaced)setTimeout(onVictory,800);
+}
+
+/* ===== EVENTOS DE SELEÇÃO ===== */
+function onDown(x,y){var c=getCellFromPt(x,y);if(!c)return;isSelecting=true;startCell=c;hlCells([c]);}
+function onMove(x,y){if(!isSelecting||!startCell)return;var c=getCellFromPt(x,y);if(!c)return;var l=getLineCells(startCell.r,startCell.c,c.r,c.c);if(l.length>0)hlCells(l);}
+function onUp(){if(!isSelecting)return;isSelecting=false;if(currentCells.length>=2){var m=checkSel(currentCells);if(m)markFound(m);}clearSel();startCell=null;}
+
+document.getElementById('grid').addEventListener('mousedown',function(e){e.preventDefault();onDown(e.clientX,e.clientY);});
+document.addEventListener('mousemove',function(e){onMove(e.clientX,e.clientY);});
+document.addEventListener('mouseup',function(){onUp();});
+document.getElementById('grid').addEventListener('touchstart',function(e){e.preventDefault();var t=e.touches[0];onDown(t.clientX,t.clientY);},{passive:false});
+document.addEventListener('touchmove',function(e){if(!isSelecting)return;var t=e.touches[0];onMove(t.clientX,t.clientY);},{passive:false});
+document.addEventListener('touchend',function(){onUp();});
+
+/* ===== TEMPO ===== */
+function startTimer(){stopTimer();seconds=0;updateTimerDisp();timerInterval=setInterval(function(){seconds++;updateTimerDisp();},1000);}
+function stopTimer(){if(timerInterval){clearInterval(timerInterval);timerInterval=null;}}
+function updateTimerDisp(){var m=String(Math.floor(seconds/60)).padStart(2,'0'),s=String(seconds%60).padStart(2,'0');document.getElementById('timer').textContent=m+':'+s;}
+function updateStats(){
+  document.getElementById('foundCount').textContent=foundCount;
+  document.getElementById('totalCount').textContent=totalPlaced;
+  var el=document.getElementById('foundCount');el.style.transform='scale(1.3)';
+  setTimeout(function(){el.style.transform='scale(1)';},200);
+}
+
+/* ===== SOM ===== */
+function playDing(){try{var ctx=new(window.AudioContext||window.webkitAudioContext)(),o=ctx.createOscillator(),g=ctx.createGain();o.connect(g);g.connect(ctx.destination);o.type='sine';o.frequency.setValueAtTime(660,ctx.currentTime);o.frequency.exponentialRampToValueAtTime(1100,ctx.currentTime+0.12);g.gain.setValueAtTime(0.18,ctx.currentTime);g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.4);o.start(ctx.currentTime);o.stop(ctx.currentTime+0.4);}catch(e){}}
+
+/* ===== TOAST ===== */
+function showToast(msg){var el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');setTimeout(function(){el.classList.remove('show');},2000);}
+
+/* ===== REVELAR DICA ===== */
+document.getElementById('btnHint').addEventListener('click',function(){
+  var uf=[];for(var i=0;i<placedWords.length;i++)if(!placedWords[i].found)uf.push(placedWords[i]);
+  if(uf.length===0){showToast('Todas já foram encontradas!');return;}
+  var pw=uf[Math.floor(Math.random()*uf.length)];
+  var f=pw.positions[0],l=pw.positions[pw.positions.length-1];
+  [f,l].forEach(function(o){var el=getEl(o.r,o.c);if(el){el.classList.remove('hint-flash');void el.offsetWidth;el.classList.add('hint-flash');}});
+  var idx=placedWords.indexOf(pw);
+  var body=document.querySelector('#hint-'+idx+' .hint-body'),tog=document.querySelector('#hint-'+idx+' .hint-toggle');
+  if(body&&!body.classList.contains('open')){body.classList.add('open');tog.classList.add('open');}
+  document.getElementById('hint-'+idx).scrollIntoView({behavior:'smooth',block:'center'});
+  showToast('Dica revelada para "'+pw.word+'"');
+});
+
+/* ===== VITÓRIA ===== */
+function onVictory(){
+  stopTimer();
+  var m=String(Math.floor(seconds/60)).padStart(2,'0'),s=String(seconds%60).padStart(2,'0');
+  document.getElementById('finalTime').textContent=m+':'+s;
+  document.getElementById('finalWords').textContent=totalPlaced;
+  document.getElementById('modalOverlay').classList.add('show');
+  launchConfetti();
+  try{var ctx=new(window.AudioContext||window.webkitAudioContext)();[523,659,784,1047].forEach(function(f,i){var o=ctx.createOscillator(),g=ctx.createGain();o.connect(g);g.connect(ctx.destination);o.type='sine';o.frequency.setValueAtTime(f,ctx.currentTime+i*0.15);g.gain.setValueAtTime(0.15,ctx.currentTime+i*0.15);g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+i*0.15+0.5);o.start(ctx.currentTime+i*0.15);o.stop(ctx.currentTime+i*0.15+0.5);});}catch(e){}
+}
+
+/* ===== CONFETTI ===== */
+function launchConfetti(){
+  var cv=document.getElementById('confettiCanvas');cv.style.display='block';cv.width=window.innerWidth;cv.height=window.innerHeight;
+  var cx=cv.getContext('2d'),cols=['#9B6DC6','#D4A5E8','#F8BBD0','#E1BEE7','#FFFFFF','#B3E5FC','#C8E6C9','#FFE0B2'],ps=[];
+  for(var i=0;i<200;i++)ps.push({x:Math.random()*cv.width,y:-Math.random()*cv.height*0.5,vx:(Math.random()-0.5)*6,vy:Math.random()*4+2,sz:Math.random()*8+3,col:cols[Math.floor(Math.random()*cols.length)],rot:Math.random()*360,rv:(Math.random()-0.5)*12,sh:Math.random()>0.4?'r':'c',life:1});
+  var fr=0;
+  function anim(){
+    cx.clearRect(0,0,cv.width,cv.height);var alive=false;
+    for(var i=0;i<ps.length;i++){var p=ps[i];p.x+=p.vx;p.y+=p.vy;p.vy+=0.06;p.vx*=0.99;p.rot+=p.rv;if(fr>120)p.life-=0.008;if(p.life<=0)continue;alive=true;cx.save();cx.globalAlpha=Math.max(0,p.life);cx.translate(p.x,p.y);cx.rotate(p.rot*Math.PI/180);cx.fillStyle=p.col;if(p.sh==='r')cx.fillRect(-p.sz/2,-p.sz/4,p.sz,p.sz/2);else{cx.beginPath();cx.arc(0,0,Math.max(1,p.sz/2),0,Math.PI*2);cx.fill();}cx.restore();}
+    fr++;if(alive)requestAnimationFrame(anim);else cv.style.display='none';
+  }
+  anim();
+}
+
+/* ===== PARTÍCULAS DE FUNDO ===== */
+var bgCv=document.getElementById('bgCanvas'),bgCx=bgCv.getContext('2d'),bgPs=[];
+function resizeBg(){bgCv.width=window.innerWidth;bgCv.height=window.innerHeight;}
+function BgP(){this.reset(true);}
+BgP.prototype.reset=function(init){
+  this.x=Math.random()*bgCv.width;this.y=init?Math.random()*bgCv.height:bgCv.height+50;
+  this.sz=Math.random()*35+10;this.sy=-(Math.random()*0.4+0.15);this.sx=(Math.random()-0.5)*0.2;
+  this.op=Math.random()*0.1+0.03;this.hu=Math.random()>0.5?'170,140,210':'200,175,240';
+};
+BgP.prototype.update=function(){this.y+=this.sy;this.x+=this.sx+Math.sin(this.y*0.005)*0.15;if(this.y<-this.sz*2)this.reset(false);};
+BgP.prototype.draw=function(){bgCx.beginPath();bgCx.arc(this.x,this.y,Math.max(1,this.sz),0,Math.PI*2);bgCx.fillStyle='rgba('+this.hu+','+this.op+')';bgCx.fill();};
+
+function initBg(){resizeBg();bgPs=[];var n=Math.min(30,Math.floor(window.innerWidth/50));for(var i=0;i<n;i++)bgPs.push(new BgP());}
+function animBg(){bgCx.clearRect(0,0,bgCv.width,bgCv.height);for(var i=0;i<bgPs.length;i++){bgPs[i].update();bgPs[i].draw();}requestAnimationFrame(animBg);}
+window.addEventListener('resize',resizeBg);
+
+/* ===== SELETOR DE NÍVEL ===== */
+document.querySelectorAll('.level-btn').forEach(function(btn){
+  btn.addEventListener('click',function(){
+    document.querySelectorAll('.level-btn').forEach(function(b){b.classList.remove('active');});
+    btn.classList.add('active');
+    currentLevel=parseInt(btn.dataset.level);
+    newGame();
+  });
+});
+
+/* ===== NOVO JOGO ===== */
+function newGame(){
+  document.getElementById('modalOverlay').classList.remove('show');
+  foundCount=0;colorIndex=0;
+  GRID_SIZE=LEVELS[currentLevel].gridSize;
+  generatePuzzle();totalPlaced=placedWords.length;
+  renderGrid();renderHints();updateStats();startTimer();
+  document.getElementById('hintsPanel').scrollTop=0;
+}
+document.getElementById('btnNew').addEventListener('click',newGame);
+document.getElementById('btnPlayAgain').addEventListener('click',newGame);
+
+/* ===== INICIALIZAÇÃO ===== */
+initBg();animBg();newGame();
+</script>
+</body>
+</html>
